@@ -1,107 +1,253 @@
 import streamlit as st
 import random
 import json
+import time
+import os
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="消費者行為大富翁", layout="wide")
+
+# ---------------------------------------------------
+# 讀取 JSON 資料
+# ---------------------------------------------------
+
+with open("board.json", "r", encoding="utf-8") as f:
+    BOARD = json.load(f)
+
+with open("questions.json", "r", encoding="utf-8") as f:
+    QUESTIONS = json.load(f)
+
+with open("chance_cards.json", "r", encoding="utf-8") as f:
+    CARD_DATA = json.load(f)
+    CHANCE_CARDS = CARD_DATA["chance"]
+    FATE_CARDS = CARD_DATA["fate"]
+
+# ---------------------------------------------------
+# 基本設定
+# ---------------------------------------------------
+
+NUM_GROUPS = 13
+START_MONEY = 2000
+
+GROUP_COLORS = [
+"#e53935","#1e88e5","#43a047","#fdd835","#8e24aa",
+"#fb8c00","#00acc1","#d81b60","#6d4c41","#546e7a",
+"#3949ab","#7cb342","#c0ca33"
+]
+
+GROUP_ICONS = [
+"🔴","🔵","🟢","🟡","🟣","🟠","🔷",
+"🌸","🟤","⚫","💎","🍏","⭐"
+]
+
+# ---------------------------------------------------
+# 初始化
+# ---------------------------------------------------
+
+if "positions" not in st.session_state:
+    st.session_state.positions = [0]*NUM_GROUPS
+    st.session_state.money = [START_MONEY]*NUM_GROUPS
+    st.session_state.owner = [None]*len(BOARD)
+    st.session_state.turn = 0
+    st.session_state.phase = "roll"
+    st.session_state.question = None
+    st.session_state.current_space = None
+
+# ---------------------------------------------------
+# UI
+# ---------------------------------------------------
 
 st.title("🎲 消費者行為大富翁")
 
-# 讀取資料
-board = json.load(open("board.json",encoding="utf8"))
-questions = json.load(open("questions.json",encoding="utf8"))
-cards = json.load(open("chance_cards.json",encoding="utf8"))
+current_group = st.session_state.turn % NUM_GROUPS
 
-# 初始化
-if "pos" not in st.session_state:
-    st.session_state.pos=[0]*13
-    st.session_state.money=[2000]*13
-    st.session_state.owner=[None]*40
-    st.session_state.turn=0
-    st.session_state.question=None
+st.info(f"目前輪到：第 {current_group+1} 組 {GROUP_ICONS[current_group]}")
 
-tokens=["🔴","🔵","🟢","🟡","🟣","🟠","⚫","⚪","🟤","🔺","🔻","🔷","🔶"]
-flags=["🚩","🏳️‍🌈","🏴","🏁","🏳️","🚩","🏳️‍🌈","🏴","🏁","🏳️","🚩","🏳️‍🌈","🏴"]
+# ---------------------------------------------------
+# 擲骰動畫
+# ---------------------------------------------------
 
-# 排行榜
-st.sidebar.title("🏆排行榜")
+def roll_dice():
 
-ranking=sorted(
-[(i,st.session_state.money[i]) for i in range(13)],
-key=lambda x:x[1],
-reverse=True
-)
+    placeholder = st.empty()
 
-for r in ranking:
-    st.sidebar.write(f"第{r[0]+1}組 {tokens[r[0]]} 💰{r[1]}")
+    for i in range(10):
+        num = random.randint(1,6)
+        placeholder.markdown(f"# 🎲 {num}")
+        time.sleep(0.05)
 
-# 棋盤
-st.header("棋盤")
+    return random.randint(1,6)
 
-cols=st.columns(10)
+# ---------------------------------------------------
+# 棋盤顯示
+# ---------------------------------------------------
 
-for i in range(40):
+st.subheader("棋盤")
 
-    text=board[i]
+cols = st.columns(10)
 
-    if st.session_state.owner[i]!=None:
-        text+=flags[st.session_state.owner[i]]
+for i,space in enumerate(BOARD):
 
-    for t,p in enumerate(st.session_state.pos):
-        if p==i:
-            text+=tokens[t]
+    owner = st.session_state.owner[i]
 
-    cols[i%10].button(text,key=i)
+    text = f"**{space['name']}**"
 
-team=st.session_state.turn%13
+    if space["type"]=="brand":
+        text += f"\n\n過路費 ${space['toll']}"
 
-st.header(f"現在輪到 第{team+1}組")
+    if owner is not None:
+        text += f"\n\n🚩 第{owner+1}組"
 
-if st.button("🎲 擲骰子"):
+    tokens = [g for g,p in enumerate(st.session_state.positions) if p==i]
 
-    dice=random.randint(1,6)
+    token_text=""
 
-    pos=st.session_state.pos[team]
-    pos=(pos+dice)%40
-    st.session_state.pos[team]=pos
+    for g in tokens:
+        token_text+=GROUP_ICONS[g]
 
-    space=board[pos]
+    text+=f"\n\n{token_text}"
 
-    st.write("骰子:",dice)
-    st.write("走到:",space)
+    cols[i%10].markdown(text)
 
-    if space in ["機會","命運"]:
+# ---------------------------------------------------
+# 擲骰
+# ---------------------------------------------------
 
-        card=random.choice(cards)
-        st.write(card["text"])
-        st.session_state.money[team]+=card["value"]
+if st.session_state.phase=="roll":
 
-    else:
+    if st.button("🎲 擲骰"):
 
-        q=random.choice(questions)
-        st.session_state.question=q
+        dice = roll_dice()
 
-# 題目
-if st.session_state.question:
+        pos = st.session_state.positions[current_group]
 
-    q=st.session_state.question
+        new_pos = (pos+dice)%len(BOARD)
 
-    ans=st.radio(q["question"],q["options"])
+        st.session_state.positions[current_group] = new_pos
 
-    if st.button("提交答案"):
+        space = BOARD[new_pos]
 
-        team=st.session_state.turn%13
-        pos=st.session_state.pos[team]
+        st.session_state.current_space = new_pos
 
-        if q["options"].index(ans)==q["answer"]:
+        if space["type"]=="start":
 
-            st.success("答對！佔領成功")
-            st.session_state.owner[pos]=team
+            st.success("回到起點")
+
+            st.session_state.money[current_group]+=200
+
+            st.session_state.turn+=1
+
+        elif space["type"]=="chance":
+
+            card=random.choice(CHANCE_CARDS)
+
+            st.warning(card["title"])
+
+            st.write(card["text"])
+
+            st.session_state.money[current_group]+=card["money"]
+
+            st.session_state.turn+=1
+
+        elif space["type"]=="fate":
+
+            card=random.choice(FATE_CARDS)
+
+            st.error(card["title"])
+
+            st.write(card["text"])
+
+            st.session_state.money[current_group]+=card["money"]
+
+            st.session_state.turn+=1
 
         else:
 
-            fee=random.choice([100,200,300,400])
-            st.error(f"答錯 支付 {fee}")
-            st.session_state.money[team]-=fee
+            owner = st.session_state.owner[new_pos]
 
-        st.session_state.question=None
+            if owner is None:
+
+                st.session_state.phase="answer"
+
+                st.session_state.question=random.choice(QUESTIONS)
+
+            elif owner==current_group:
+
+                st.success("自己的地盤")
+
+                st.session_state.turn+=1
+
+            else:
+
+                toll = space["toll"]
+
+                st.warning(f"支付過路費 ${toll}")
+
+                st.session_state.money[current_group]-=toll
+
+                st.session_state.money[owner]+=toll
+
+                st.session_state.turn+=1
+
+# ---------------------------------------------------
+# 答題
+# ---------------------------------------------------
+
+if st.session_state.phase=="answer":
+
+    q=st.session_state.question
+
+    st.subheader("回答題目")
+
+    st.write(q["question"])
+
+    ans = st.radio("選擇答案",q["options"])
+
+    if st.button("提交答案"):
+
+        idx=q["options"].index(ans)
+
+        pos=st.session_state.current_space
+
+        space=BOARD[pos]
+
+        if idx==q["answer"]:
+
+            st.success("答對！成功佔領")
+
+            st.session_state.owner[pos]=current_group
+
+        else:
+
+            st.error("答錯")
+
+            toll=space["toll"]
+
+            st.session_state.money[current_group]-=toll
+
+        st.write("概念:",q["concept"])
+
+        st.session_state.phase="roll"
+
         st.session_state.turn+=1
+
+# ---------------------------------------------------
+# 排行榜
+# ---------------------------------------------------
+
+st.subheader("排行榜")
+
+data=[]
+
+for g in range(NUM_GROUPS):
+
+    owned=sum([1 for x in st.session_state.owner if x==g])
+
+    data.append({
+        "組別":g+1,
+        "現金":st.session_state.money[g],
+        "佔領":owned
+    })
+
+data=sorted(data,key=lambda x:(x["佔領"],x["現金"]),reverse=True)
+
+st.table(data)
