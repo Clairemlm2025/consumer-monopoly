@@ -147,18 +147,33 @@ def render_cell_html(idx):
     else:
         bg = "#f8f9fa"
 
-    owner_label = ""
-    if owner is not None:
-        owner_label = f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};margin-top:2px;">🚩 第{owner+1}組</div>'
+    top_parts = []
+    top_parts.append(
+        f'<div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>'
+    )
+    top_parts.append(
+        f'<div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">{space["name"]}</div>'
+    )
+    top_parts.append(
+        f'<div style="font-size:11px;color:#78909c;">{space["category"]}</div>'
+    )
 
-    toll_line = ""
     if space["type"] == "brand":
-        toll_line = f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>'
+        top_parts.append(
+            f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>'
+        )
+
+    if owner is not None:
+        top_parts.append(
+            f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};margin-top:2px;">🚩 第{owner+1}組</div>'
+        )
+
+    top_html = "".join(top_parts)
 
     token_html = ""
     if tokens_here:
         token_html = "".join(
-            f'<span style="margin-right:3px;font-size:16px;">{GROUP_ICONS[g]}</span>'
+            f'<span style="margin-right:4px;font-size:16px;">{GROUP_ICONS[g]}</span>'
             for g in tokens_here
         )
 
@@ -173,28 +188,24 @@ def render_cell_html(idx):
         display:flex;
         flex-direction:column;
         justify-content:space-between;
+        overflow:hidden;
     ">
         <div>
-            <div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>
-            <div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">
-                {space["name"]}
-            </div>
-            <div style="font-size:11px;color:#78909c;">{space["category"]}</div>
-            {toll_line}
-            {owner_label}
+            {top_html}
         </div>
-
         <div style="
-            min-height:22px;
+            min-height:24px;
             margin-top:6px;
             white-space:nowrap;
             overflow:hidden;
+            background:rgba(255,255,255,0.7);
+            border-radius:6px;
+            padding:2px 4px;
         ">
             {token_html}
         </div>
     </div>
     """
-
 def render_board():
     size = 11
     coords = []
