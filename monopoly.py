@@ -416,7 +416,7 @@ with left:
     st.subheader("棋盤")
     render_board()
 
- center_col1, center_col2, center_col3 = st.columns([1, 1.6, 1])
+    center_col1, center_col2, center_col3 = st.columns([1, 1.6, 1])
 
     with center_col2:
         st.markdown("### 🎮 中央操作區")
@@ -434,23 +434,7 @@ with left:
             st.warning(f"目前所在格：{space['name']}")
             st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
 
-            st.markdown(
-                f"""
-                <div style="
-                    background:#fff8e1;
-                    border:1px solid #ffe082;
-                    border-radius:10px;
-                    padding:10px;
-                    margin-bottom:10px;
-                    font-size:15px;
-                    font-weight:700;
-                    color:#5d4037;
-                ">
-                    {q["question"]}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.markdown(f"**題目：** {q['question']}")
 
             center_answer = st.radio(
                 "請選擇答案",
