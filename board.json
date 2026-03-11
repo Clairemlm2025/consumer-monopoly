@@ -9,7 +9,7 @@
   {"name": "家樂福超市", "type": "brand", "toll": 100, "category": "超市"},
   {"name": "命運", "type": "fate", "toll": 0, "category": "命運"},
   {"name": "家樂福", "type": "brand", "toll": 200, "category": "量販店"},
-  {"name": "大潤發", "type": "brand", "toll": 200, "category": "量販店"},
+  {"name": "大全聯", "type": "brand", "toll": 200, "category": "量販店"},
   {"name": "好市多", "type": "brand", "toll": 200, "category": "量販店"},
   {"name": "機會", "type": "chance", "toll": 0, "category": "機會"},
   {"name": "Nike", "type": "brand", "toll": 300, "category": "專賣店"},
