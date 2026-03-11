@@ -389,6 +389,37 @@ with st.sidebar:
     if st.button("🔄 重新整理畫面", use_container_width=True):
         st.rerun()
 
+    st.markdown("---")
+    st.subheader("目前操作")
+
+    st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
+    st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
+
+    if st.session_state.phase == "roll":
+        if st.button("🎲 擲骰", type="primary", use_container_width=True):
+            process_roll()
+            st.rerun()
+
+    if st.session_state.phase == "answer" and st.session_state.current_question is not None:
+        q = st.session_state.current_question
+        pos = st.session_state.current_space
+        space = BOARD[pos]
+
+        st.warning(f"目前所在格：{space['name']}")
+        st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
+
+        sidebar_answer = st.radio(
+            "請選擇答案",
+            q["options"],
+            key=f"sidebar_ans_{st.session_state.turn}_{pos}"
+        )
+
+        if st.button("✅ 提交答案", type="primary", use_container_width=True):
+            selected_idx = q["options"].index(sidebar_answer)
+            process_answer(selected_idx)
+            st.session_state.turn += 1
+            st.rerun()
+
 # 頂部狀態
 c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
 with c1:
@@ -443,60 +474,3 @@ with right:
     for line in st.session_state.log[:12]:
         st.caption(line)
 
-# 操作區
-st.markdown("---")
-st.subheader("操作區")
-
-if st.session_state.phase == "roll":
-    if st.button("🎲 擲骰", type="primary", use_container_width=True):
-        process_roll()
-        st.rerun()
-
-if st.session_state.phase == "answer" and st.session_state.current_question is not None:
-    q = st.session_state.current_question
-    pos = st.session_state.current_space
-    space = BOARD[pos]
-
-    st.markdown(
-        f"""
-        <div style="
-            border:1px solid #ffe082;
-            background:#fff8e1;
-            border-radius:14px;
-            padding:14px;
-            margin-bottom:14px;
-        ">
-            <div style="font-size:14px;color:#795548;">目前所在格</div>
-            <div style="font-size:22px;font-weight:900;">【{space['name']}】</div>
-            <div style="font-size:14px;color:#546e7a;">
-                答對可佔領；答錯支付固定過路費 ${space['toll']}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(f"**題目：** {q['question']}")
-    answer = st.radio("請選擇答案", q["options"], key=f"ans_{st.session_state.turn}_{pos}")
-
-    if st.button("✅ 提交答案", type="primary", use_container_width=True):
-        selected_idx = q["options"].index(answer)
-        process_answer(selected_idx)
-        st.session_state.turn += 1
-        st.rerun()
-
-with st.expander("規則說明"):
-    st.markdown("""
-- 共 13 組，起始現金皆為 **$2000**
-- 通過起點可獲得 **$200**
-- 走到未被佔領的品牌格：  
-  - 答對：成功佔領  
-  - 答錯：支付該格固定過路費  
-- 走到已被別組佔領的格子：  
-  - **不可再搶佔**
-  - **不回答題目**
-  - 直接支付固定過路費給原佔領組  
-- 走到自己已佔領的格子：安全通過  
-- 機會 / 命運卡金額只會是 **100 / 200 / 300 / 400**
-- 排名先比 **佔領格數**，再比 **現金**
-    """)
