@@ -2,7 +2,6 @@ import streamlit as st
 import random
 import json
 import time
-import html
 
 st.set_page_config(page_title="消費者行為大富翁", layout="wide")
 
@@ -39,7 +38,7 @@ GROUP_ICONS = [
 ]
 
 # =========================================================
-# 初始化
+# 初始化 session state
 # =========================================================
 def init_game():
     if "positions" not in st.session_state:
@@ -53,7 +52,7 @@ def init_game():
     if "current_group" not in st.session_state:
         st.session_state.current_group = 0
     if "phase" not in st.session_state:
-        st.session_state.phase = "roll"
+        st.session_state.phase = "roll"   # roll / answer
     if "current_question" not in st.session_state:
         st.session_state.current_question = None
     if "current_space" not in st.session_state:
@@ -82,7 +81,7 @@ def owned_count(g):
 
 def add_log(text):
     st.session_state.log.insert(0, text)
-    st.session_state.log = st.session_state.log[:60]
+    st.session_state.log = st.session_state.log[:50]
 
 def draw_question():
     return random.choice(QUESTIONS)
@@ -133,9 +132,6 @@ def render_cell_html(idx):
     owner = st.session_state.owner[idx]
     tokens_here = [g for g, p in enumerate(st.session_state.positions) if p == idx]
 
-    name = html.escape(str(space.get("name", "")))
-    category = html.escape(str(space.get("category", "")))
-
     bg = "#ffffff"
     border = "#cfd8dc"
 
@@ -151,50 +147,42 @@ def render_cell_html(idx):
     else:
         bg = "#f8f9fa"
 
-    top_html = f"""
-        <div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>
-        <div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">{name}</div>
-        <div style="font-size:11px;color:#78909c;">{category}</div>
-    """
+    lines = []
+    lines.append(f'<div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>')
+    lines.append(f'<div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">{space["name"]}</div>')
+    lines.append(f'<div style="font-size:11px;color:#78909c;">{space["category"]}</div>')
 
     if space["type"] == "brand":
-        top_html += f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>'
+        lines.append(f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>')
 
     if owner is not None:
-        top_html += f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};margin-top:2px;">🚩 第{owner+1}組</div>'
+        lines.append(f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};">🚩 第{owner+1}組</div>')
 
-    token_html = ""
     if tokens_here:
         token_html = "".join(
-            f'<span style="margin-right:4px;font-size:16px;">{GROUP_ICONS[g]}</span>'
+            f'<span style="margin-right:3px;font-size:16px;">{GROUP_ICONS[g]}</span>'
             for g in tokens_here
         )
+        lines.append(f'<div style="margin-top:auto;min-height:22px;white-space:nowrap;overflow:hidden;">{token_html}</div>')
+    else:
+        lines.append('<div style="margin-top:auto;min-height:22px;"></div>')
+
+    inner_html = "".join(lines)
 
     return f"""
     <div style="
-        min-height:130px;
+        height:130px;
         border:2px solid {border};
         background:{bg};
         border-radius:12px;
         padding:8px;
         box-sizing:border-box;
+        overflow:hidden;
         display:flex;
         flex-direction:column;
-        justify-content:space-between;
-        overflow:hidden;
+        justify-content:flex-start;
     ">
-        <div>{top_html}</div>
-        <div style="
-            min-height:24px;
-            margin-top:6px;
-            white-space:nowrap;
-            overflow:hidden;
-            background:rgba(255,255,255,0.7);
-            border-radius:6px;
-            padding:2px 4px;
-        ">
-            {token_html}
-        </div>
+        {inner_html}
     </div>
     """
 
@@ -212,6 +200,7 @@ def render_board():
         coords.append((r, 0))
 
     grid = [["" for _ in range(size)] for _ in range(size)]
+
     for i in range(len(BOARD)):
         r, c = coords[i]
         grid[r][c] = render_cell_html(i)
@@ -238,12 +227,12 @@ def render_board():
         <div style="margin-top:18px;font-size:20px;font-weight:800;">目前回合：第 {current_group+1} 組</div>
         <div style="margin-top:6px;font-size:18px;color:#5c6bc0;font-weight:700;">目前階段：{phase_text}</div>
         <div style="margin-top:10px;font-size:15px;color:#546e7a;max-width:80%;">
-            {html.escape(st.session_state.last_message)}
+            {st.session_state.last_message}
         </div>
     </div>
     """
 
-    page_html = """
+    html = """
     <style>
     .board-wrap {
         display:grid;
@@ -263,14 +252,15 @@ def render_board():
         for c in range(size):
             if 1 <= r <= 9 and 1 <= c <= 9:
                 if r == 1 and c == 1:
-                    page_html += f'<div class="board-center">{center_html}</div>'
+                    html += f'<div class="board-center">{center_html}</div>'
                 else:
                     continue
             else:
-                page_html += grid[r][c] if grid[r][c] else "<div></div>"
+                html += grid[r][c] if grid[r][c] else "<div></div>"
 
-    page_html += "</div>"
-    st.markdown(page_html, unsafe_allow_html=True)
+    html += "</div>"
+
+    st.markdown(html, unsafe_allow_html=True)
 
 # =========================================================
 # 遊戲流程
@@ -284,16 +274,19 @@ def process_roll():
     old_pos = st.session_state.positions[group_idx]
     new_pos = (old_pos + dice) % len(BOARD)
 
+    # 通過起點獎金
     if old_pos + dice >= len(BOARD):
         st.session_state.money[group_idx] += PASS_START_BONUS
         add_log(f"第 {group_idx+1} 組通過起點，獲得 ${PASS_START_BONUS}")
 
+    # 先移動棋子
     st.session_state.positions[group_idx] = new_pos
     st.session_state.current_space = new_pos
     st.session_state.last_roll = dice
 
     space = BOARD[new_pos]
 
+    # 起點
     if space["type"] == "start":
         st.session_state.phase = "roll"
         st.session_state.current_group = next_group(group_idx)
@@ -303,6 +296,7 @@ def process_roll():
         add_log(msg)
         return
 
+    # 機會
     if space["type"] == "chance":
         card = draw_card("chance")
         st.session_state.money[group_idx] += card["money"]
@@ -319,6 +313,7 @@ def process_roll():
         add_log(msg)
         return
 
+    # 命運
     if space["type"] == "fate":
         card = draw_card("fate")
         st.session_state.money[group_idx] += card["money"]
@@ -335,8 +330,10 @@ def process_roll():
         add_log(msg)
         return
 
+    # 品牌格
     owner = st.session_state.owner[new_pos]
 
+    # 尚未被佔領：出題
     if owner is None:
         st.session_state.phase = "answer"
         st.session_state.current_question = draw_question()
@@ -348,6 +345,7 @@ def process_roll():
         add_log(msg)
         return
 
+    # 自己的地
     if owner == group_idx:
         st.session_state.phase = "roll"
         st.session_state.current_group = next_group(group_idx)
@@ -360,6 +358,7 @@ def process_roll():
         add_log(msg)
         return
 
+    # 別人的地：不可再搶，直接付固定過路費
     toll = space["toll"]
     st.session_state.money[group_idx] -= toll
     st.session_state.money[owner] += toll
@@ -419,6 +418,7 @@ def process_answer(selected_idx):
             f" 冠軍是第 {st.session_state.winner_group+1} 組。"
         )
         add_log(st.session_state.last_message)
+
     else:
         st.session_state.phase = "roll"
         st.session_state.current_group = next_group(group_idx)
@@ -449,7 +449,10 @@ with st.sidebar:
     if st.session_state.game_over:
         st.error("🏁 遊戲已結束")
         if st.session_state.winner_group is not None:
-            st.success(f"冠軍：第 {st.session_state.winner_group+1} 組 {GROUP_ICONS[st.session_state.winner_group]}")
+            st.success(
+                f"冠軍：第 {st.session_state.winner_group+1} 組 "
+                f"{GROUP_ICONS[st.session_state.winner_group]}"
+            )
 
     st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
     st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
@@ -514,7 +517,6 @@ with right:
             "money": st.session_state.money[g],
             "position": st.session_state.positions[g]
         })
-
     ranking.sort(key=lambda x: (x["owned"], x["money"]), reverse=True)
 
     for idx, item in enumerate(ranking, start=1):
