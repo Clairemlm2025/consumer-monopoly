@@ -135,18 +135,27 @@ def render_cell_html(idx):
     else:
         bg = "#f8f9fa"
 
-    owner_label = ""
-    if owner is not None:
-        owner_label = f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};">🚩 第{owner+1}組</div>'
+    lines = []
+    lines.append(f'<div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>')
+    lines.append(f'<div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">{space["name"]}</div>')
+    lines.append(f'<div style="font-size:11px;color:#78909c;">{space["category"]}</div>')
 
-    toll_line = ""
     if space["type"] == "brand":
-        toll_line = f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>'
+        lines.append(f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>')
 
-    token_html = "".join(
-        f'<span style="margin-right:3px;font-size:16px;">{GROUP_ICONS[g]}</span>'
-        for g in tokens_here
-    )
+    if owner is not None:
+        lines.append(f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};">🚩 第{owner+1}組</div>')
+
+    if tokens_here:
+        token_html = "".join(
+            f'<span style="margin-right:3px;font-size:16px;">{GROUP_ICONS[g]}</span>'
+            for g in tokens_here
+        )
+        lines.append(f'<div style="margin-top:auto;min-height:22px;white-space:nowrap;overflow:hidden;">{token_html}</div>')
+    else:
+        lines.append('<div style="margin-top:auto;min-height:22px;"></div>')
+
+    inner_html = "".join(lines)
 
     return f"""
     <div style="
@@ -161,19 +170,9 @@ def render_cell_html(idx):
         flex-direction:column;
         justify-content:flex-start;
     ">
-        <div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>
-        <div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">
-            {space["name"]}
-        </div>
-        <div style="font-size:11px;color:#78909c;">{space["category"]}</div>
-        {toll_line}
-        {owner_label}
-        <div style="margin-top:auto;min-height:22px;white-space:nowrap;overflow:hidden;">
-            {token_html}
-        </div>
+        {inner_html}
     </div>
     """
-
 def render_board():
     size = 11
     coords = []
@@ -192,24 +191,32 @@ def render_board():
         r, c = coords[i]
         grid[r][c] = render_cell_html(i)
 
-    center_html = """
-    <div style="
-        height:100%;
-        border:2px dashed #90a4ae;
-        border-radius:18px;
-        background:linear-gradient(135deg,#fff3e0,#e3f2fd);
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        text-align:center;
-        flex-direction:column;
-        padding:20px;
-        box-sizing:border-box;
-    ">
-        <div style="font-size:30px;font-weight:900;">🎲 消費者行為大富翁</div>
-        <div style="font-size:15px;color:#455a64;margin-top:8px;">固定過路費・品牌搶地・課堂版</div>
+    current_group = st.session_state.current_group
+phase_text = "擲骰" if st.session_state.phase == "roll" else "答題"
+
+center_html = f"""
+<div style="
+    height:100%;
+    border:2px dashed #90a4ae;
+    border-radius:18px;
+    background:linear-gradient(135deg,#fff3e0,#e3f2fd);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    flex-direction:column;
+    padding:20px;
+    box-sizing:border-box;
+">
+    <div style="font-size:30px;font-weight:900;">🎲 消費者行為大富翁</div>
+    <div style="font-size:15px;color:#455a64;margin-top:8px;">固定過路費・品牌搶地・課堂版</div>
+    <div style="margin-top:18px;font-size:20px;font-weight:800;">目前回合：第 {current_group+1} 組</div>
+    <div style="margin-top:6px;font-size:18px;color:#5c6bc0;font-weight:700;">目前階段：{phase_text}</div>
+    <div style="margin-top:10px;font-size:15px;color:#546e7a;max-width:80%;">
+        {st.session_state.last_message}
     </div>
-    """
+</div>
+"""
 
     html = """
     <style>
@@ -389,36 +396,6 @@ with st.sidebar:
     if st.button("🔄 重新整理畫面", use_container_width=True):
         st.rerun()
 
-    st.markdown("---")
-    st.subheader("目前操作")
-
-    st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
-    st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
-
-    if st.session_state.phase == "roll":
-        if st.button("🎲 擲骰", type="primary", use_container_width=True):
-            process_roll()
-            st.rerun()
-
-    if st.session_state.phase == "answer" and st.session_state.current_question is not None:
-        q = st.session_state.current_question
-        pos = st.session_state.current_space
-        space = BOARD[pos]
-
-        st.warning(f"目前所在格：{space['name']}")
-        st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
-
-        sidebar_answer = st.radio(
-            "請選擇答案",
-            q["options"],
-            key=f"sidebar_ans_{st.session_state.turn}_{pos}"
-        )
-
-        if st.button("✅ 提交答案", type="primary", use_container_width=True):
-            selected_idx = q["options"].index(sidebar_answer)
-            process_answer(selected_idx)
-            st.session_state.turn += 1
-            st.rerun()
 
 # 頂部狀態
 c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
@@ -436,6 +413,54 @@ left, right = st.columns([2.2, 1], gap="large")
 with left:
     st.subheader("棋盤")
     render_board()
+
+ center_col1, center_col2, center_col3 = st.columns([1, 1.6, 1])
+
+    with center_col2:
+        st.markdown("### 🎮 中央操作區")
+
+        if st.session_state.phase == "roll":
+            if st.button("🎲 擲骰", type="primary", use_container_width=True):
+                process_roll()
+                st.rerun()
+
+        if st.session_state.phase == "answer" and st.session_state.current_question is not None:
+            q = st.session_state.current_question
+            pos = st.session_state.current_space
+            space = BOARD[pos]
+
+            st.warning(f"目前所在格：{space['name']}")
+            st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
+
+            st.markdown(
+                f"""
+                <div style="
+                    background:#fff8e1;
+                    border:1px solid #ffe082;
+                    border-radius:10px;
+                    padding:10px;
+                    margin-bottom:10px;
+                    font-size:15px;
+                    font-weight:700;
+                    color:#5d4037;
+                ">
+                    {q["question"]}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            center_answer = st.radio(
+                "請選擇答案",
+                q["options"],
+                key=f"center_ans_{st.session_state.turn}_{pos}"
+            )
+
+            if st.button("✅ 提交答案", type="primary", use_container_width=True):
+                selected_idx = q["options"].index(center_answer)
+                process_answer(selected_idx)
+                st.session_state.turn += 1
+                st.rerun()
 
 with right:
     st.subheader("即時排行榜")
