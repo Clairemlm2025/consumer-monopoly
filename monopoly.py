@@ -187,36 +187,37 @@ def render_board():
         coords.append((r, 0))
 
     grid = [["" for _ in range(size)] for _ in range(size)]
+
     for i in range(len(BOARD)):
         r, c = coords[i]
         grid[r][c] = render_cell_html(i)
 
     current_group = st.session_state.current_group
-phase_text = "擲骰" if st.session_state.phase == "roll" else "答題"
+    phase_text = "擲骰" if st.session_state.phase == "roll" else "答題"
 
-center_html = f"""
-<div style="
-    height:100%;
-    border:2px dashed #90a4ae;
-    border-radius:18px;
-    background:linear-gradient(135deg,#fff3e0,#e3f2fd);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    flex-direction:column;
-    padding:20px;
-    box-sizing:border-box;
-">
-    <div style="font-size:30px;font-weight:900;">🎲 消費者行為大富翁</div>
-    <div style="font-size:15px;color:#455a64;margin-top:8px;">固定過路費・品牌搶地・課堂版</div>
-    <div style="margin-top:18px;font-size:20px;font-weight:800;">目前回合：第 {current_group+1} 組</div>
-    <div style="margin-top:6px;font-size:18px;color:#5c6bc0;font-weight:700;">目前階段：{phase_text}</div>
-    <div style="margin-top:10px;font-size:15px;color:#546e7a;max-width:80%;">
-        {st.session_state.last_message}
+    center_html = f"""
+    <div style="
+        height:100%;
+        border:2px dashed #90a4ae;
+        border-radius:18px;
+        background:linear-gradient(135deg,#fff3e0,#e3f2fd);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
+        flex-direction:column;
+        padding:20px;
+        box-sizing:border-box;
+    ">
+        <div style="font-size:30px;font-weight:900;">🎲 消費者行為大富翁</div>
+        <div style="font-size:15px;color:#455a64;margin-top:8px;">固定過路費・品牌搶地・課堂版</div>
+        <div style="margin-top:18px;font-size:20px;font-weight:800;">目前回合：第 {current_group+1} 組</div>
+        <div style="margin-top:6px;font-size:18px;color:#5c6bc0;font-weight:700;">目前階段：{phase_text}</div>
+        <div style="margin-top:10px;font-size:15px;color:#546e7a;max-width:80%;">
+            {st.session_state.last_message}
+        </div>
     </div>
-</div>
-"""
+    """
 
     html = """
     <style>
@@ -245,6 +246,7 @@ center_html = f"""
                 html += grid[r][c] if grid[r][c] else "<div></div>"
 
     html += "</div>"
+
     st.markdown(html, unsafe_allow_html=True)
 
 # =========================================================
