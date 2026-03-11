@@ -1,19 +1,9 @@
 import streamlit as st
 import random
 import json
-import os
-import tempfile
-import threading
 import time
-from datetime import datetime
 
 st.set_page_config(page_title="消費者行為大富翁", layout="wide")
-
-# =========================================================
-# 檔案設定
-# =========================================================
-STATE_FILE = "game_state.json"
-STATE_LOCK = threading.Lock()
 
 # =========================================================
 # 讀取外部資料
@@ -48,63 +38,46 @@ GROUP_ICONS = [
 ]
 
 # =========================================================
+# 初始化 session state
+# =========================================================
+def init_game():
+    if "positions" not in st.session_state:
+        st.session_state.positions = [0] * NUM_GROUPS
+    if "money" not in st.session_state:
+        st.session_state.money = [START_MONEY] * NUM_GROUPS
+    if "owner" not in st.session_state:
+        st.session_state.owner = [None] * len(BOARD)
+    if "turn" not in st.session_state:
+        st.session_state.turn = 0
+    if "current_group" not in st.session_state:
+        st.session_state.current_group = 0
+    if "phase" not in st.session_state:
+        st.session_state.phase = "roll"   # roll / answer
+    if "current_question" not in st.session_state:
+        st.session_state.current_question = None
+    if "current_space" not in st.session_state:
+        st.session_state.current_space = None
+    if "last_roll" not in st.session_state:
+        st.session_state.last_roll = None
+    if "last_message" not in st.session_state:
+        st.session_state.last_message = "遊戲開始，請第 1 組擲骰。"
+    if "log" not in st.session_state:
+        st.session_state.log = []
+
+init_game()
+
+# =========================================================
 # 工具函式
 # =========================================================
-def atomic_write_json(path, data):
-    fd, temp_path = tempfile.mkstemp(suffix=".json")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(temp_path, path)
-
-def make_session_id():
-    return f"{time.time()}_{random.randint(1000,9999)}"
-
-def default_state():
-    return {
-        "positions": [0] * NUM_GROUPS,
-        "money": [START_MONEY] * NUM_GROUPS,
-        "owner": [None] * len(BOARD),
-        "turn": 0,
-        "current_group": 0,
-        "phase": "roll",   # roll / answer
-        "current_question": None,
-        "current_space": None,
-        "last_roll": None,
-        "last_message": "遊戲開始，請第 1 組擲骰。",
-        "group_locks": {},  # {"0": "session_xxx"}
-        "log": [],
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-def load_state():
-    with STATE_LOCK:
-        if not os.path.exists(STATE_FILE):
-            state = default_state()
-            atomic_write_json(STATE_FILE, state)
-            return state
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-def save_state(state):
-    state["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with STATE_LOCK:
-        atomic_write_json(STATE_FILE, state)
-
-def reset_game():
-    state = default_state()
-    save_state(state)
-    return state
-
-def add_log(state, text):
-    ts = datetime.now().strftime("%H:%M:%S")
-    state["log"].insert(0, f"[{ts}] {text}")
-    state["log"] = state["log"][:60]
-
 def next_group(g):
     return (g + 1) % NUM_GROUPS
 
-def owned_count(state, g):
-    return sum(1 for x in state["owner"] if x == g)
+def owned_count(g):
+    return sum(1 for x in st.session_state.owner if x == g)
+
+def add_log(text):
+    st.session_state.log.insert(0, text)
+    st.session_state.log = st.session_state.log[:50]
 
 def draw_question():
     return random.choice(QUESTIONS)
@@ -114,24 +87,38 @@ def draw_card(card_type):
         return random.choice(CHANCE_CARDS)
     return random.choice(FATE_CARDS)
 
-# =========================================================
-# 使用者 session
-# =========================================================
-if "session_id" not in st.session_state:
-    st.session_state.session_id = make_session_id()
+def reset_game():
+    st.session_state.positions = [0] * NUM_GROUPS
+    st.session_state.money = [START_MONEY] * NUM_GROUPS
+    st.session_state.owner = [None] * len(BOARD)
+    st.session_state.turn = 0
+    st.session_state.current_group = 0
+    st.session_state.phase = "roll"
+    st.session_state.current_question = None
+    st.session_state.current_space = None
+    st.session_state.last_roll = None
+    st.session_state.last_message = "遊戲開始，請第 1 組擲骰。"
+    st.session_state.log = []
 
-if "player_group" not in st.session_state:
-    st.session_state.player_group = None
-
-session_id = st.session_state.session_id
+def animate_dice():
+    placeholder = st.empty()
+    final_num = 1
+    for _ in range(10):
+        final_num = random.randint(1, 6)
+        placeholder.markdown(
+            f"<div style='font-size:42px;font-weight:900;text-align:center;'>🎲 {final_num}</div>",
+            unsafe_allow_html=True
+        )
+        time.sleep(0.08)
+    return final_num
 
 # =========================================================
-# 顯示用
+# 棋盤顯示
 # =========================================================
-def render_cell_html(idx, state):
+def render_cell_html(idx):
     space = BOARD[idx]
-    owner = state["owner"][idx]
-    tokens_here = [g for g, p in enumerate(state["positions"]) if p == idx]
+    owner = st.session_state.owner[idx]
+    tokens_here = [g for g, p in enumerate(st.session_state.positions) if p == idx]
 
     bg = "#ffffff"
     border = "#cfd8dc"
@@ -187,7 +174,7 @@ def render_cell_html(idx, state):
     </div>
     """
 
-def render_board(state):
+def render_board():
     size = 11
     coords = []
 
@@ -203,7 +190,7 @@ def render_board(state):
     grid = [["" for _ in range(size)] for _ in range(size)]
     for i in range(len(BOARD)):
         r, c = coords[i]
-        grid[r][c] = render_cell_html(i, state)
+        grid[r][c] = render_cell_html(i)
 
     center_html = """
     <div style="
@@ -220,7 +207,7 @@ def render_board(state):
         box-sizing:border-box;
     ">
         <div style="font-size:30px;font-weight:900;">🎲 消費者行為大富翁</div>
-        <div style="font-size:15px;color:#455a64;margin-top:8px;">13組同步・固定過路費・品牌搶地</div>
+        <div style="font-size:15px;color:#455a64;margin-top:8px;">固定過路費・品牌搶地・課堂版</div>
     </div>
     """
 
@@ -256,244 +243,179 @@ def render_board(state):
 # =========================================================
 # 遊戲流程
 # =========================================================
-def animate_dice():
-    placeholder = st.empty()
-    final_num = 1
-    for _ in range(10):
-        final_num = random.randint(1, 6)
-        placeholder.markdown(
-            f"<div style='font-size:42px;font-weight:900;text-align:center;'>🎲 {final_num}</div>",
-            unsafe_allow_html=True
-        )
-        time.sleep(0.08)
-    return final_num
-
-def process_roll(state, group_idx):
+def process_roll():
+    group_idx = st.session_state.current_group
     dice = animate_dice()
-    old_pos = state["positions"][group_idx]
+    old_pos = st.session_state.positions[group_idx]
     new_pos = (old_pos + dice) % len(BOARD)
 
+    # 通過起點獎金
     if old_pos + dice >= len(BOARD):
-        state["money"][group_idx] += PASS_START_BONUS
-        add_log(state, f"第 {group_idx+1} 組通過起點，獲得 ${PASS_START_BONUS}")
+        st.session_state.money[group_idx] += PASS_START_BONUS
+        add_log(f"第 {group_idx+1} 組通過起點，獲得 ${PASS_START_BONUS}")
 
-    state["positions"][group_idx] = new_pos
-    state["current_space"] = new_pos
-    state["last_roll"] = dice
+    # 先移動棋子
+    st.session_state.positions[group_idx] = new_pos
+    st.session_state.current_space = new_pos
+    st.session_state.last_roll = dice
 
     space = BOARD[new_pos]
 
-    # 先顯示棋子已到新位置，再判斷事件
+    # 起點
     if space["type"] == "start":
-        state["phase"] = "roll"
-        state["current_group"] = next_group(group_idx)
-        state["current_question"] = None
-        msg = f"第 {group_idx+1} 組擲出 {dice} 點，停在起點。下一組：第 {state['current_group']+1} 組。"
-        state["last_message"] = msg
-        add_log(state, msg)
-        return state
+        st.session_state.phase = "roll"
+        st.session_state.current_group = next_group(group_idx)
+        st.session_state.current_question = None
+        msg = f"第 {group_idx+1} 組擲出 {dice} 點，停在起點。下一組：第 {st.session_state.current_group+1} 組。"
+        st.session_state.last_message = msg
+        add_log(msg)
+        return
 
+    # 機會
     if space["type"] == "chance":
         card = draw_card("chance")
-        state["money"][group_idx] += card["money"]
-        state["phase"] = "roll"
-        state["current_group"] = next_group(group_idx)
-        state["current_question"] = None
+        st.session_state.money[group_idx] += card["money"]
+        st.session_state.phase = "roll"
+        st.session_state.current_group = next_group(group_idx)
+        st.session_state.current_question = None
         sign = "+" if card["money"] >= 0 else ""
         msg = (
             f"第 {group_idx+1} 組擲出 {dice} 點，來到【機會】。"
             f"{card['title']}：{card['text']}（{sign}${card['money']}）"
-            f" 下一組：第 {state['current_group']+1} 組。"
+            f" 下一組：第 {st.session_state.current_group+1} 組。"
         )
-        state["last_message"] = msg
-        add_log(state, msg)
-        return state
+        st.session_state.last_message = msg
+        add_log(msg)
+        return
 
+    # 命運
     if space["type"] == "fate":
         card = draw_card("fate")
-        state["money"][group_idx] += card["money"]
-        state["phase"] = "roll"
-        state["current_group"] = next_group(group_idx)
-        state["current_question"] = None
+        st.session_state.money[group_idx] += card["money"]
+        st.session_state.phase = "roll"
+        st.session_state.current_group = next_group(group_idx)
+        st.session_state.current_question = None
         sign = "+" if card["money"] >= 0 else ""
         msg = (
             f"第 {group_idx+1} 組擲出 {dice} 點，來到【命運】。"
             f"{card['title']}：{card['text']}（{sign}${card['money']}）"
-            f" 下一組：第 {state['current_group']+1} 組。"
+            f" 下一組：第 {st.session_state.current_group+1} 組。"
         )
-        state["last_message"] = msg
-        add_log(state, msg)
-        return state
+        st.session_state.last_message = msg
+        add_log(msg)
+        return
 
-    owner = state["owner"][new_pos]
+    # 品牌格
+    owner = st.session_state.owner[new_pos]
 
-    # 空地：出題
+    # 尚未被佔領：出題
     if owner is None:
-        state["phase"] = "answer"
-        state["current_question"] = draw_question()
+        st.session_state.phase = "answer"
+        st.session_state.current_question = draw_question()
         msg = (
             f"第 {group_idx+1} 組擲出 {dice} 點，來到【{space['name']}】。"
-            f" 此格未被佔領，請答題。答對可佔領，答錯支付固定過路費 ${space['toll']}。"
+            f" 此格尚未被佔領，請回答題目。答對可佔領；答錯支付固定過路費 ${space['toll']}。"
         )
-        state["last_message"] = msg
-        add_log(state, msg)
-        return state
+        st.session_state.last_message = msg
+        add_log(msg)
+        return
 
     # 自己的地
     if owner == group_idx:
-        state["phase"] = "roll"
-        state["current_group"] = next_group(group_idx)
-        state["current_question"] = None
+        st.session_state.phase = "roll"
+        st.session_state.current_group = next_group(group_idx)
+        st.session_state.current_question = None
         msg = (
             f"第 {group_idx+1} 組擲出 {dice} 點，來到自己的【{space['name']}】。"
-            f" 安全通過，下一組：第 {state['current_group']+1} 組。"
+            f" 安全通過，下一組：第 {st.session_state.current_group+1} 組。"
         )
-        state["last_message"] = msg
-        add_log(state, msg)
-        return state
+        st.session_state.last_message = msg
+        add_log(msg)
+        return
 
-    # 別人的地：不能搶，直接付費
+    # 別人的地：不可再搶，直接付固定過路費
     toll = space["toll"]
-    state["money"][group_idx] -= toll
-    state["money"][owner] += toll
-    state["phase"] = "roll"
-    state["current_group"] = next_group(group_idx)
-    state["current_question"] = None
+    st.session_state.money[group_idx] -= toll
+    st.session_state.money[owner] += toll
+    st.session_state.phase = "roll"
+    st.session_state.current_group = next_group(group_idx)
+    st.session_state.current_question = None
     msg = (
         f"第 {group_idx+1} 組擲出 {dice} 點，來到第 {owner+1} 組已佔領的【{space['name']}】。"
-        f" 不可再搶佔，直接支付過路費 ${toll}。下一組：第 {state['current_group']+1} 組。"
+        f" 不可再搶佔，直接支付固定過路費 ${toll}。下一組：第 {st.session_state.current_group+1} 組。"
     )
-    state["last_message"] = msg
-    add_log(state, msg)
-    return state
+    st.session_state.last_message = msg
+    add_log(msg)
 
-def process_answer(state, group_idx, selected_idx):
-    q = state["current_question"]
-    pos = state["current_space"]
+def process_answer(selected_idx):
+    q = st.session_state.current_question
+    group_idx = st.session_state.current_group
+    pos = st.session_state.current_space
     space = BOARD[pos]
 
     if selected_idx == q["answer"]:
-        state["owner"][pos] = group_idx
+        st.session_state.owner[pos] = group_idx
         msg = (
             f"第 {group_idx+1} 組回答正確，成功佔領【{space['name']}】。"
             f" 理論概念：{q['concept']}。"
         )
     else:
         toll = space["toll"]
-        state["money"][group_idx] -= toll
+        st.session_state.money[group_idx] -= toll
         correct = q["options"][q["answer"]]
         msg = (
             f"第 {group_idx+1} 組回答錯誤，支付固定過路費 ${toll}。"
             f" 正確答案：{correct}。理論概念：{q['concept']}。"
         )
 
-    state["phase"] = "roll"
-    state["current_group"] = next_group(group_idx)
-    state["current_question"] = None
-    state["current_space"] = None
-    state["last_message"] = msg + f" 下一組：第 {state['current_group']+1} 組。"
-    add_log(state, state["last_message"])
-    return state
+    st.session_state.phase = "roll"
+    st.session_state.current_group = next_group(group_idx)
+    st.session_state.current_question = None
+    st.session_state.current_space = None
+    st.session_state.last_message = msg + f" 下一組：第 {st.session_state.current_group+1} 組。"
+    add_log(st.session_state.last_message)
 
 # =========================================================
-# 載入狀態
+# 頁面
 # =========================================================
-state = load_state()
+st.title("🎲 消費者行為大富翁｜先救活版")
 
-# =========================================================
-# 側邊欄：身份與組別鎖定
-# =========================================================
 with st.sidebar:
-    st.header("玩家設定")
-    role = st.radio("身份", ["老師 / 主控", "玩家"], index=1)
-
-    if role == "玩家":
-        current_player_group = st.session_state.player_group
-        if current_player_group is None:
-            choice = st.selectbox("選擇你的組別", list(range(NUM_GROUPS)), format_func=lambda x: f"第 {x+1} 組")
-            if st.button("加入此組", use_container_width=True):
-                state = load_state()
-                lock = state["group_locks"].get(str(choice))
-                if lock is None:
-                    state["group_locks"][str(choice)] = session_id
-                    save_state(state)
-                    st.session_state.player_group = choice
-                    st.success(f"已加入第 {choice+1} 組")
-                    st.rerun()
-                elif lock == session_id:
-                    st.session_state.player_group = choice
-                    st.success(f"已回到第 {choice+1} 組")
-                    st.rerun()
-                else:
-                    st.error("這一組已經有其他帳號控制，不能加入。")
-        else:
-            st.success(f"你目前是第 {current_player_group+1} 組 {GROUP_ICONS[current_player_group]}")
-            if st.button("退出本組", use_container_width=True):
-                state = load_state()
-                lock = state["group_locks"].get(str(current_player_group))
-                if lock == session_id:
-                    state["group_locks"].pop(str(current_player_group), None)
-                    save_state(state)
-                st.session_state.player_group = None
-                st.rerun()
-
-    st.markdown("---")
-    st.caption(f"最後更新：{state['updated_at']}")
-    if st.button("🔄 重新整理", use_container_width=True):
+    st.subheader("控制台")
+    if st.button("♻️ 重設整局遊戲", type="primary", use_container_width=True):
+        reset_game()
         st.rerun()
 
-    if role == "老師 / 主控":
-        st.markdown("---")
-        if st.button("♻️ 重設整局遊戲", type="primary", use_container_width=True):
-            state = reset_game()
-            st.session_state.player_group = None
-            st.success("遊戲已重設")
-            st.rerun()
+    if st.button("🔄 重新整理畫面", use_container_width=True):
+        st.rerun()
 
-# =========================================================
-# 權限判斷
-# =========================================================
-current_group = state["current_group"]
-player_group = st.session_state.player_group
-
-if role == "老師 / 主控":
-    can_control = True
-else:
-    can_control = (player_group is not None and player_group == current_group)
-
-# =========================================================
-# 頂部資訊
-# =========================================================
-st.title("🎲 消費者行為大富翁")
-
+# 頂部狀態
 c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
 with c1:
-    st.metric("目前回合", f"第 {current_group+1} 組")
+    st.metric("目前回合", f"第 {st.session_state.current_group+1} 組")
 with c2:
-    st.metric("目前階段", "擲骰" if state["phase"] == "roll" else "答題")
+    st.metric("目前階段", "擲骰" if st.session_state.phase == "roll" else "答題")
 with c3:
-    st.metric("上次骰子", state["last_roll"] if state["last_roll"] is not None else "-")
+    st.metric("上次骰子", st.session_state.last_roll if st.session_state.last_roll is not None else "-")
 with c4:
-    st.info(state["last_message"])
+    st.info(st.session_state.last_message)
 
-# =========================================================
-# 主畫面左右欄
-# =========================================================
 left, right = st.columns([2.2, 1], gap="large")
 
 with left:
     st.subheader("棋盤")
-    render_board(state)
+    render_board()
 
 with right:
     st.subheader("即時排行榜")
+
     ranking = []
     for g in range(NUM_GROUPS):
         ranking.append({
             "group": g,
-            "owned": owned_count(state, g),
-            "money": state["money"][g],
-            "position": state["positions"][g]
+            "owned": owned_count(g),
+            "money": st.session_state.money[g],
+            "position": st.session_state.positions[g]
         })
     ranking.sort(key=lambda x: (x["owned"], x["money"]), reverse=True)
 
@@ -518,41 +440,21 @@ with right:
         )
 
     st.subheader("最新紀錄")
-    for line in state["log"][:12]:
+    for line in st.session_state.log[:12]:
         st.caption(line)
 
-# =========================================================
 # 操作區
-# =========================================================
 st.markdown("---")
 st.subheader("操作區")
 
-if role == "玩家" and player_group is None:
-    st.warning("請先在左側選擇並加入你的組別。")
+if st.session_state.phase == "roll":
+    if st.button("🎲 擲骰", type="primary", use_container_width=True):
+        process_roll()
+        st.rerun()
 
-if role == "玩家" and player_group is not None and not can_control:
-    st.warning(f"現在輪到第 {current_group+1} 組，請等待該組操作。")
-
-if state["phase"] == "roll":
-    if can_control:
-        if st.button("🎲 擲骰", type="primary", use_container_width=True):
-            state = load_state()
-            current_group = state["current_group"]
-
-            if role == "玩家":
-                # 再確認鎖定權
-                lock = state["group_locks"].get(str(player_group))
-                if player_group != current_group or lock != session_id:
-                    st.error("目前不是你這組的回合，或你沒有控制權。")
-                    st.stop()
-
-            state = process_roll(state, current_group)
-            save_state(state)
-            st.rerun()
-
-if state["phase"] == "answer" and state["current_question"] is not None:
-    q = state["current_question"]
-    pos = state["current_space"]
+if st.session_state.phase == "answer" and st.session_state.current_question is not None:
+    q = st.session_state.current_question
+    pos = st.session_state.current_space
     space = BOARD[pos]
 
     st.markdown(
@@ -575,31 +477,14 @@ if state["phase"] == "answer" and state["current_question"] is not None:
     )
 
     st.markdown(f"**題目：** {q['question']}")
-    answer = st.radio("請選擇答案", q["options"], key=f"ans_{state['updated_at']}")
+    answer = st.radio("請選擇答案", q["options"], key=f"ans_{st.session_state.turn}_{pos}")
 
-    if can_control:
-        if st.button("✅ 提交答案", type="primary", use_container_width=True):
-            state = load_state()
-            current_group = state["current_group"]
+    if st.button("✅ 提交答案", type="primary", use_container_width=True):
+        selected_idx = q["options"].index(answer)
+        process_answer(selected_idx)
+        st.session_state.turn += 1
+        st.rerun()
 
-            if role == "玩家":
-                lock = state["group_locks"].get(str(player_group))
-                if player_group != current_group or lock != session_id:
-                    st.error("目前不是你這組的答題回合，或你沒有控制權。")
-                    st.stop()
-
-            # 重新抓最新題目
-            q = state["current_question"]
-            selected_idx = q["options"].index(answer)
-            state = process_answer(state, current_group, selected_idx)
-            save_state(state)
-            st.rerun()
-    else:
-        st.warning("目前正在由當前回合組別答題。")
-
-# =========================================================
-# 規則說明
-# =========================================================
 with st.expander("規則說明"):
     st.markdown("""
 - 共 13 組，起始現金皆為 **$2000**
@@ -613,7 +498,5 @@ with st.expander("規則說明"):
   - 直接支付固定過路費給原佔領組  
 - 走到自己已佔領的格子：安全通過  
 - 機會 / 命運卡金額只會是 **100 / 200 / 300 / 400**
-- 一組只能有一個帳號控制，其他人不能加入該組
-- 只有當前回合那一組可以擲骰與答題
 - 排名先比 **佔領格數**，再比 **現金**
     """)
