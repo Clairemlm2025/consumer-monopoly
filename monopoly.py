@@ -63,6 +63,10 @@ def init_game():
         st.session_state.last_message = "遊戲開始，請第 1 組擲骰。"
     if "log" not in st.session_state:
         st.session_state.log = []
+    if "game_over" not in st.session_state:
+        st.session_state.game_over = False
+    if "winner_group" not in st.session_state:
+        st.session_state.winner_group = None
 
 init_game()
 
@@ -87,6 +91,12 @@ def draw_card(card_type):
         return random.choice(CHANCE_CARDS)
     return random.choice(FATE_CARDS)
 
+def all_brand_spaces_owned():
+    for i, space in enumerate(BOARD):
+        if space["type"] == "brand" and st.session_state.owner[i] is None:
+            return False
+    return True
+
 def reset_game():
     st.session_state.positions = [0] * NUM_GROUPS
     st.session_state.money = [START_MONEY] * NUM_GROUPS
@@ -99,6 +109,8 @@ def reset_game():
     st.session_state.last_roll = None
     st.session_state.last_message = "遊戲開始，請第 1 組擲骰。"
     st.session_state.log = []
+    st.session_state.game_over = False
+    st.session_state.winner_group = None
 
 def animate_dice():
     placeholder = st.empty()
@@ -173,6 +185,7 @@ def render_cell_html(idx):
         {inner_html}
     </div>
     """
+
 def render_board():
     size = 11
     coords = []
@@ -253,6 +266,9 @@ def render_board():
 # 遊戲流程
 # =========================================================
 def process_roll():
+    if st.session_state.game_over:
+        return
+
     group_idx = st.session_state.current_group
     dice = animate_dice()
     old_pos = st.session_state.positions[group_idx]
@@ -357,6 +373,9 @@ def process_roll():
     add_log(msg)
 
 def process_answer(selected_idx):
+    if st.session_state.game_over:
+        return
+
     q = st.session_state.current_question
     group_idx = st.session_state.current_group
     pos = st.session_state.current_space
@@ -377,20 +396,46 @@ def process_answer(selected_idx):
             f" 正確答案：{correct}。理論概念：{q['concept']}。"
         )
 
-    st.session_state.phase = "roll"
-    st.session_state.current_group = next_group(group_idx)
     st.session_state.current_question = None
     st.session_state.current_space = None
-    st.session_state.last_message = msg + f" 下一組：第 {st.session_state.current_group+1} 組。"
-    add_log(st.session_state.last_message)
+
+    if all_brand_spaces_owned():
+        st.session_state.game_over = True
+
+        ranking = []
+        for g in range(NUM_GROUPS):
+            ranking.append({
+                "group": g,
+                "owned": owned_count(g),
+                "money": st.session_state.money[g]
+            })
+
+        ranking.sort(key=lambda x: (x["owned"], x["money"]), reverse=True)
+        st.session_state.winner_group = ranking[0]["group"]
+
+        st.session_state.last_message = (
+            f"所有品牌地都已被佔領，遊戲結束！"
+            f" 冠軍是第 {st.session_state.winner_group+1} 組。"
+        )
+        add_log(st.session_state.last_message)
+
+    else:
+        st.session_state.phase = "roll"
+        st.session_state.current_group = next_group(group_idx)
+        st.session_state.last_message = msg + f" 下一組：第 {st.session_state.current_group+1} 組。"
+        add_log(st.session_state.last_message)
 
 # =========================================================
 # 頁面
 # =========================================================
-st.title("🎲 消費者行為大富翁｜先救活版")
+st.title("🎲 消費者行為大富翁｜課堂版")
+
+if st.session_state.game_over and st.session_state.winner_group is not None:
+    st.success(f"🏁 遊戲結束！冠軍是第 {st.session_state.winner_group+1} 組 {GROUP_ICONS[st.session_state.winner_group]}")
 
 with st.sidebar:
     st.subheader("控制台")
+
     if st.button("♻️ 重設整局遊戲", type="primary", use_container_width=True):
         reset_game()
         st.rerun()
@@ -401,15 +446,27 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("目前操作")
 
+    if st.session_state.game_over:
+        st.error("🏁 遊戲已結束")
+        if st.session_state.winner_group is not None:
+            st.success(
+                f"冠軍：第 {st.session_state.winner_group+1} 組 "
+                f"{GROUP_ICONS[st.session_state.winner_group]}"
+            )
+
     st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
     st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
 
-    if st.session_state.phase == "roll":
+    if (not st.session_state.game_over) and st.session_state.phase == "roll":
         if st.button("🎲 擲骰", type="primary", use_container_width=True):
             process_roll()
             st.rerun()
 
-    if st.session_state.phase == "answer" and st.session_state.current_question is not None:
+    if (
+        (not st.session_state.game_over)
+        and st.session_state.phase == "answer"
+        and st.session_state.current_question is not None
+    ):
         q = st.session_state.current_question
         pos = st.session_state.current_space
         space = BOARD[pos]
@@ -418,23 +475,7 @@ with st.sidebar:
         st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
 
         st.markdown("### 題目")
-        st.markdown(
-            f"""
-            <div style="
-                background:#fff8e1;
-                border:1px solid #ffe082;
-                border-radius:10px;
-                padding:10px;
-                margin-bottom:10px;
-                font-size:15px;
-                font-weight:700;
-                color:#5d4037;
-            ">
-                {q["question"]}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        st.write(q["question"])
 
         sidebar_answer = st.radio(
             "請選擇答案",
@@ -447,7 +488,6 @@ with st.sidebar:
             process_answer(selected_idx)
             st.session_state.turn += 1
             st.rerun()
-
 
 # 頂部狀態
 c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
@@ -465,7 +505,6 @@ left, right = st.columns([2.2, 1], gap="large")
 with left:
     st.subheader("棋盤")
     render_board()
-
 
 with right:
     st.subheader("即時排行榜")
@@ -504,3 +543,19 @@ with right:
     for line in st.session_state.log[:12]:
         st.caption(line)
 
+with st.expander("規則說明"):
+    st.markdown("""
+- 共 13 組，起始現金皆為 **$2000**
+- 通過起點可獲得 **$200**
+- 走到未被佔領的品牌格：  
+  - 答對：成功佔領  
+  - 答錯：支付該格固定過路費  
+- 走到已被別組佔領的格子：  
+  - **不可再搶佔**
+  - **不回答題目**
+  - 直接支付固定過路費給原佔領組  
+- 走到自己已佔領的格子：安全通過  
+- 機會 / 命運卡金額只會是 **100 / 200 / 300 / 400**
+- 所有品牌格都被佔領後，遊戲立即結束
+- 排名先比 **佔領格數**，再比 **現金**
+    """)
