@@ -67,6 +67,8 @@ def init_game():
         st.session_state.game_over = False
     if "winner_group" not in st.session_state:
         st.session_state.winner_group = None
+    if "used_question_ids" not in st.session_state:
+        st.session_state.used_question_ids = []
 
 init_game()
 
@@ -84,7 +86,15 @@ def add_log(text):
     st.session_state.log = st.session_state.log[:50]
 
 def draw_question():
-    return random.choice(QUESTIONS)
+    available_questions = [
+        q for q in QUESTIONS
+        if q["id"] not in st.session_state.used_question_ids
+    ]
+
+    if not available_questions:
+        return None
+
+    return random.choice(available_questions)
 
 def draw_card(card_type):
     if card_type == "chance":
@@ -111,6 +121,7 @@ def reset_game():
     st.session_state.log = []
     st.session_state.game_over = False
     st.session_state.winner_group = None
+    st.session_state.used_question_ids = []
 
 def animate_dice():
     placeholder = st.empty()
@@ -335,8 +346,22 @@ def process_roll():
 
     # 尚未被佔領：出題
     if owner is None:
+        question = draw_question()
+
+        if question is None:
+            st.session_state.phase = "roll"
+            st.session_state.current_group = next_group(group_idx)
+            st.session_state.current_question = None
+            msg = (
+                f"第 {group_idx+1} 組擲出 {dice} 點，來到【{space['name']}】。"
+                f" 但可用題目已全部答對過，無法再出題。下一組：第 {st.session_state.current_group+1} 組。"
+            )
+            st.session_state.last_message = msg
+            add_log(msg)
+            return
+
         st.session_state.phase = "answer"
-        st.session_state.current_question = draw_question()
+        st.session_state.current_question = question
         msg = (
             f"第 {group_idx+1} 組擲出 {dice} 點，來到【{space['name']}】。"
             f" 此格尚未被佔領，請回答題目。答對可佔領；答錯支付固定過路費 ${space['toll']}。"
@@ -383,6 +408,10 @@ def process_answer(selected_idx):
 
     if selected_idx == q["answer"]:
         st.session_state.owner[pos] = group_idx
+
+        if q["id"] not in st.session_state.used_question_ids:
+            st.session_state.used_question_ids.append(q["id"])
+
         msg = (
             f"第 {group_idx+1} 組回答正確，成功佔領【{space['name']}】。"
             f" 理論概念：{q['concept']}。"
@@ -456,6 +485,7 @@ with st.sidebar:
 
     st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
     st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
+    st.info(f"已答對題數：{len(st.session_state.used_question_ids)}")
 
     if (not st.session_state.game_over) and st.session_state.phase == "roll":
         if st.button("🎲 擲骰", type="primary", use_container_width=True):
@@ -472,6 +502,7 @@ with st.sidebar:
         space = BOARD[pos]
 
         st.warning(f"目前所在格：{space['name']}")
+        st.caption(f"題目 ID：{q['id']}")
         st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
 
         st.markdown("### 題目")
@@ -548,7 +579,8 @@ with st.expander("規則說明"):
 - 共 13 組，起始現金皆為 **$2000**
 - 通過起點可獲得 **$200**
 - 走到未被佔領的品牌格：  
-  - 答對：成功佔領  
+  - 題目從「尚未被答對過」的題庫中隨機抽出  
+  - 答對：成功佔領，且該題不再出現  
   - 答錯：支付該格固定過路費  
 - 走到已被別組佔領的格子：  
   - **不可再搶佔**
