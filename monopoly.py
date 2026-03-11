@@ -147,42 +147,51 @@ def render_cell_html(idx):
     else:
         bg = "#f8f9fa"
 
-    lines = []
-    lines.append(f'<div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>')
-    lines.append(f'<div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">{space["name"]}</div>')
-    lines.append(f'<div style="font-size:11px;color:#78909c;">{space["category"]}</div>')
-
-    if space["type"] == "brand":
-        lines.append(f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>')
-
+    owner_label = ""
     if owner is not None:
-        lines.append(f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};">🚩 第{owner+1}組</div>')
+        owner_label = f'<div style="font-size:11px;font-weight:700;color:{GROUP_COLORS[owner]};margin-top:2px;">🚩 第{owner+1}組</div>'
 
+    toll_line = ""
+    if space["type"] == "brand":
+        toll_line = f'<div style="font-size:11px;color:#455a64;">過路費 ${space["toll"]}</div>'
+
+    token_html = ""
     if tokens_here:
         token_html = "".join(
             f'<span style="margin-right:3px;font-size:16px;">{GROUP_ICONS[g]}</span>'
             for g in tokens_here
         )
-        lines.append(f'<div style="margin-top:auto;min-height:22px;white-space:nowrap;overflow:hidden;">{token_html}</div>')
-    else:
-        lines.append('<div style="margin-top:auto;min-height:22px;"></div>')
-
-    inner_html = "".join(lines)
 
     return f"""
     <div style="
-        height:110px;
+        min-height:130px;
         border:2px solid {border};
         background:{bg};
         border-radius:12px;
         padding:8px;
         box-sizing:border-box;
-        overflow:hidden;
         display:flex;
         flex-direction:column;
-        justify-content:flex-start;
+        justify-content:space-between;
     ">
-        {inner_html}
+        <div>
+            <div style="font-size:11px;color:#607d8b;font-weight:700;">#{idx}</div>
+            <div style="font-size:15px;font-weight:800;line-height:1.15;margin:2px 0 4px 0;">
+                {space["name"]}
+            </div>
+            <div style="font-size:11px;color:#78909c;">{space["category"]}</div>
+            {toll_line}
+            {owner_label}
+        </div>
+
+        <div style="
+            min-height:22px;
+            margin-top:6px;
+            white-space:nowrap;
+            overflow:hidden;
+        ">
+            {token_html}
+        </div>
     </div>
     """
 
