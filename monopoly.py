@@ -398,6 +398,56 @@ with st.sidebar:
     if st.button("🔄 重新整理畫面", use_container_width=True):
         st.rerun()
 
+    st.markdown("---")
+    st.subheader("目前操作")
+
+    st.info(f"目前回合：第 {st.session_state.current_group+1} 組")
+    st.info(f"目前階段：{'擲骰' if st.session_state.phase == 'roll' else '答題'}")
+
+    if st.session_state.phase == "roll":
+        if st.button("🎲 擲骰", type="primary", use_container_width=True):
+            process_roll()
+            st.rerun()
+
+    if st.session_state.phase == "answer" and st.session_state.current_question is not None:
+        q = st.session_state.current_question
+        pos = st.session_state.current_space
+        space = BOARD[pos]
+
+        st.warning(f"目前所在格：{space['name']}")
+        st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
+
+        st.markdown("### 題目")
+        st.markdown(
+            f"""
+            <div style="
+                background:#fff8e1;
+                border:1px solid #ffe082;
+                border-radius:10px;
+                padding:10px;
+                margin-bottom:10px;
+                font-size:15px;
+                font-weight:700;
+                color:#5d4037;
+            ">
+                {q["question"]}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        sidebar_answer = st.radio(
+            "請選擇答案",
+            q["options"],
+            key=f"sidebar_ans_{st.session_state.turn}_{pos}"
+        )
+
+        if st.button("✅ 提交答案", type="primary", use_container_width=True):
+            selected_idx = q["options"].index(sidebar_answer)
+            process_answer(selected_idx)
+            st.session_state.turn += 1
+            st.rerun()
+
 
 # 頂部狀態
 c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
@@ -416,37 +466,6 @@ with left:
     st.subheader("棋盤")
     render_board()
 
-    center_col1, center_col2, center_col3 = st.columns([1, 1.6, 1])
-
-    with center_col2:
-        st.markdown("### 🎮 中央操作區")
-
-        if st.session_state.phase == "roll":
-            if st.button("🎲 擲骰", type="primary", use_container_width=True):
-                process_roll()
-                st.rerun()
-
-        if st.session_state.phase == "answer" and st.session_state.current_question is not None:
-            q = st.session_state.current_question
-            pos = st.session_state.current_space
-            space = BOARD[pos]
-
-            st.warning(f"目前所在格：{space['name']}")
-            st.caption(f"答對可佔領；答錯支付固定過路費 ${space['toll']}")
-
-            st.markdown(f"**題目：** {q['question']}")
-
-            center_answer = st.radio(
-                "請選擇答案",
-                q["options"],
-                key=f"center_ans_{st.session_state.turn}_{pos}"
-            )
-
-            if st.button("✅ 提交答案", type="primary", use_container_width=True):
-                selected_idx = q["options"].index(center_answer)
-                process_answer(selected_idx)
-                st.session_state.turn += 1
-                st.rerun()
 
 with right:
     st.subheader("即時排行榜")
